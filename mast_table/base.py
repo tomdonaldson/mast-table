@@ -4,7 +4,7 @@ import warnings
 
 from traitlets import (
     List, Unicode, Bool, Int, Dict, Any, TraitError, observe,
-    validate as validate_trait,
+    validate as validate_trait,  # Avoid name conflict with mast_table.validate
 )
 from ipyvuetify import VuetifyTemplate
 
@@ -271,6 +271,11 @@ class BaseMastTable(VuetifyTemplate):
         self._push_current_page()
 
     def _update_filter_mask(self, displayed_items):
+        """
+        Recompute ``filter_mask`` from the rows currently displayed.
+        It is read-only, so it is updated via ``set_trait``,
+        and only when the mask actually changes.
+        """
         mask = np.isin(
             np.asarray(self.table[col_unique_row_index]),
             np.asarray(displayed_items[col_unique_row_index]),
@@ -386,6 +391,14 @@ class BaseMastTable(VuetifyTemplate):
 
     @validate_trait('selected_mask')
     def _validate_selected_mask(self, proposal):
+        """
+        Coerce a proposed ``selected_mask`` to a boolean numpy array and
+        check that its length matches the number of rows in ``table``.
+
+        This is done in a traitlets validator rather than in the observer
+        because validators run *before* the value is stored and before any
+        observers fire. That protects observer code from potential junk.
+        """
         mask = proposal['value']
         if not hasattr(mask, '__len__'):
             mask = list(mask)
@@ -398,6 +411,10 @@ class BaseMastTable(VuetifyTemplate):
 
     @observe('selected_mask')
     def _on_selected_mask(self, change):
+        """
+        Propagate a change to ``selected_mask`` into ``selected_rows`` so the
+        UI selection matches. Does nothing if they are already in sync.
+        """
         mask = change['new']
         if mask is None or self.table is None or not self.item_key:
             return
